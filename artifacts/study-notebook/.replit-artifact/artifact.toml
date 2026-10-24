@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Study Notebook"
+description = "A private study notebook that turns course material into source-linked concepts, summaries, guides, and practice after the learner reviews and approves each extracted item."
+version = "1.0.0"
+id = "artifacts/study-notebook"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22144
+
+[services.development]
+run = "pnpm --filter @workspace/study-notebook run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/study-notebook", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/study-notebook/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22144"
+BASE_PATH = "/"

@@ -1,0 +1,1 @@
+- [Study notebook privacy boundary](study-notebook-privacy.md) — keep source processing local unless the user explicitly opts into disclosed external AI.
