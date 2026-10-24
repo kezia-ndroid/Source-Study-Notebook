@@ -8,7 +8,7 @@ import {
 
 type Source = { id: string; course: string; topic: string; title: string; text: string; created: string };
 type CandidateKind = 'concept'|'term'|'system'|'process'|'how-to'|'question';
-type Candidate = { id: string; sourceId: string; title: string; excerpt: string; kind: CandidateKind; interpretation: string; tags: string[]; status: 'pending'|'approved'|'rejected'; };
+type Candidate = { id: string; sourceId: string; sourcePage?: number; title: string; excerpt: string; kind: CandidateKind; interpretation: string; tags: string[]; status: 'pending'|'approved'|'rejected'; };
 type StudyItem = Candidate & { learned?: boolean };
 type NotebookData = { sources: Source[]; candidates: Candidate[]; progress: { sessions: number; minutes: number; reviewed: number; correct: number; mastered: string[]; daily: Record<string, number> } };
 
@@ -30,6 +30,19 @@ To compare diffusion rates, place equal volumes of dye into two beakers of water
 How does temperature affect the rate of diffusion?`;
 const id = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2,7)}`;
 const sentenceList = (text: string) => text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 35);
+function sourceExcerpts(text:string):{excerpt:string;page?:number}[]{
+  const sections=text.split(/(?=^===== PDF PAGE \d+ =====[ \t]*$)/m);
+  const chunks=sections.flatMap(section=>{
+    const marker=section.match(/^===== PDF PAGE (\d+) =====[ \t]*(?:\r?\n)?/);
+    const page=marker?Number(marker[1]):undefined;
+    const body=marker?section.slice(marker[0].length):section;
+    return sentenceList(body).map(excerpt=>({excerpt,page}));
+  });
+  const unique=chunks.filter((chunk,index)=>chunks.findIndex(other=>other.excerpt===chunk.excerpt)===index);
+  const limit=18;
+  if(unique.length<=limit)return unique;
+  return Array.from({length:limit},(_,index)=>unique[Math.round(index*(unique.length-1)/(limit-1))]);
+}
 const demoSource: Source = { id:'source-bio-1', course:'Biology', topic:'Cell transport', title:'Cell membrane & passive transport', text:bioText, created:'2025-02-12' };
 const demoCandidates: Candidate[] = [
   {id:'cand-1',sourceId:demoSource.id,title:'The cell membrane',excerpt:'The cell membrane is a selectively permeable boundary that separates the cell from its surroundings.',kind:'concept',interpretation:'',tags:['cell structure','foundations'],status:'pending'},
@@ -67,7 +80,7 @@ function App() {
   const [kindFilter,setKindFilter] = useState('all');
   const [mobileOpen,setMobileOpen] = useState(false);
   const [activeConcept,setActiveConcept] = useState('');
-  const [studyMode,setStudyMode] = useState<'flashcards'|'quiz'|'session'>('flashcards');
+  const [studyMode,setStudyMode] = useState<'flashcards'|'quiz'|'session'>('quiz');
   const [studyIndex,setStudyIndex] = useState(0);
   const [flipped,setFlipped] = useState(false);
   const [quizChoice,setQuizChoice] = useState<number|null>(null);
@@ -106,11 +119,11 @@ function App() {
   }));
   const addSource=(course:string,topic:string,title:string,text:string)=>{
     const source:Source={id:id(),course:course.trim(),topic:topic.trim(),title:title.trim()||topic.trim()||'Untitled source',text:text.trim(),created:new Date().toISOString().slice(0,10)};
-    const chunks=sentenceList(source.text);
-    const generated:Candidate[]=chunks.slice(0,18).map((excerpt,index)=>({id:id(),sourceId:source.id,title:makeTitle(excerpt),excerpt,kind:guessKind(excerpt),interpretation:'',tags:[source.topic.toLowerCase()].filter(Boolean),status:'pending'}));
+    const chunks=sourceExcerpts(source.text);
+    const generated:Candidate[]=chunks.map(({excerpt,page})=>({id:id(),sourceId:source.id,sourcePage:page,title:makeTitle(excerpt),excerpt,kind:guessKind(excerpt),interpretation:'',tags:[source.topic.toLowerCase()].filter(Boolean),status:'pending'}));
     setData(d=>({...d,sources:[source,...d.sources],candidates:[...generated,...d.candidates]}));
     setModal(false);navigate('sources');setSourceDetail(source.id);
-    notify(`${generated.length} review candidates created from sentence-level excerpts.`);
+    notify(`${generated.length} source-backed candidates created. All are waiting for your approval.`);
   };
   const navItems:{id:Page;label:string;icon:typeof BookOpen;count?:number}[]=[
     {id:'overview',label:'Overview',icon:NotebookPen},
