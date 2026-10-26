@@ -3,7 +3,7 @@ import {
   ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight, CircleHelp, Clock3,
   FilePlus2, FileText, GraduationCap, Layers, Library, LockKeyhole,
   Menu, NotebookPen, PanelLeftClose, Plus, Search, Sparkles, Tag, Trash2,
-  Upload, X, BarChart3, Play, Quote,
+  Upload, X, BarChart3, Play, Quote, Download,
 } from 'lucide-react';
 
 type Source = { id: string; course: string; topic: string; title: string; text: string; created: string };
@@ -113,6 +113,20 @@ function App() {
     const today=new Date().toISOString().slice(0,10);
     return {...d,progress:{...d.progress,sessions:d.progress.sessions+1,minutes:d.progress.minutes+minutes,daily:{...d.progress.daily,[today]:(d.progress.daily[today]||0)+minutes}}};
   });
+  const downloadBackup=()=>{
+    const exportedAt=new Date().toISOString();
+    const backup={format:'fieldnotes-study-notebook-backup',version:1,exportedAt,data};
+    const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=url;
+    link.download=`study-notebook-backup-${exportedAt.slice(0,10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+    notify('Full backup downloaded. Keep the file private; it contains your source material.');
+  };
   const markUnderstanding=(candidateId:string,understood:boolean)=>setData(d=>({
     ...d,
     progress:{...d.progress,mastered:understood?Array.from(new Set([...d.progress.mastered,candidateId])):d.progress.mastered.filter(id=>id!==candidateId)},
@@ -143,7 +157,7 @@ function App() {
       <div className="content">
          {sourceDetailData ? <SourceDetail source={sourceDetailData} candidates={data.candidates.filter(c=>c.sourceId===sourceDetailData.id)} onBack={()=>setSourceDetail(null)} onInterpret={(c,v)=>updateCandidate(c.id,{interpretation:v})} onReview={()=>navigate('review')} onDelete={()=>{if(window.confirm('Delete this source and its review items?')){setData(d=>({...d,sources:d.sources.filter(s=>s.id!==sourceDetailData.id),candidates:d.candidates.filter(c=>c.sourceId!==sourceDetailData.id)}));setSourceDetail(null);notify('Source deleted.')}}}/> :
         <>
-        {page==='overview'&&<Overview data={data} pending={pending} approved={approved} onNavigate={navigate} onAdd={()=>setModal(true)}/>}
+         {page==='overview'&&<Overview data={data} pending={pending} approved={approved} onNavigate={navigate} onAdd={()=>setModal(true)} onBackup={downloadBackup}/>}
         {page==='sources'&&<SourcesPage sources={data.sources} candidates={data.candidates} onAdd={()=>setModal(true)} onOpen={setSourceDetail} onDelete={s=>{if(window.confirm(`Delete “${s.title}” and its items?`)){setData(d=>({...d,sources:d.sources.filter(x=>x.id!==s.id),candidates:d.candidates.filter(c=>c.sourceId!==s.id)}));notify('Source deleted.');}}}/>}
         {page==='review'&&<ReviewPage pending={pending} sources={data.sources} approved={approved} onUpdate={updateCandidate} onReview={recordReview} onMerge={(c,target)=>{const found=data.candidates.find(i=>i.id===target);if(found){updateCandidate(found.id,{excerpt:`${found.excerpt}\n\n${c.excerpt}`,tags:Array.from(new Set([...found.tags,...c.tags]))});recordReview(c.id,'rejected');notify('Evidence merged into the selected approved item.');}}}/>}
         {page==='library'&&<LibraryPage items={filteredLibrary} query={query} setQuery={setQuery} filter={kindFilter} setFilter={setKindFilter} onUpdate={updateCandidate} onOpenSource={setSourceDetail}/>}
@@ -179,15 +193,15 @@ function guessKind(text:string):CandidateKind{
   return 'concept';
 }
 function Heading({eyebrow,title,subtitle,action}:{eyebrow:string;title:string;subtitle:string;action?:React.ReactNode}){return <div className="page-head"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p className="subhead">{subtitle}</p></div>{action}</div>}
-function Overview({data,pending,approved,onNavigate,onAdd}:{data:NotebookData;pending:Candidate[];approved:Candidate[];onNavigate:(p:Page)=>void;onAdd:()=>void}){
+function Overview({data,pending,approved,onNavigate,onAdd,onBackup}:{data:NotebookData;pending:Candidate[];approved:Candidate[];onNavigate:(p:Page)=>void;onAdd:()=>void;onBackup:()=>void}){
   const pct=data.progress.reviewed?Math.round(data.progress.correct/data.progress.reviewed*100):0;
-  return <><Heading eyebrow="Personal study system" title="Your notebook" subtitle="A quiet place to turn course material into evidence you can return to." action={<button className="button primary" data-testid="button-add-source" onClick={onAdd}><FilePlus2 size={15}/> Add source material</button>}/>
+  return <><Heading eyebrow="Personal study system" title="Your notebook" subtitle="A quiet place to turn course material into evidence you can return to." action={<div className="toolbar" style={{margin:0,flexWrap:'wrap'}}><button className="button" data-testid="button-download-backup" onClick={onBackup}><Download size={14}/> Download full backup</button><button className="button primary" data-testid="button-add-source" onClick={onAdd}><FilePlus2 size={15}/> Add source material</button></div>}/>
     <div className="overview-grid"><section className="panel welcome-panel"><div className="eyebrow">A note to your future self</div><h2>Study from what you actually have.</h2><p>Every review card stays connected to its original passage. Keep the source close; add your own interpretation separately.</p><button className="button" data-testid="button-open-review" onClick={()=>onNavigate('review')}>Review {pending.length} waiting <ArrowRight size={14}/></button></section>
     <section className="panel stat-panel"><div><div className="stat-label">Approved for study</div><div className="stat-number" data-testid="text-approved-count">{approved.length}</div><div className="stat-note">Items you have chosen to keep</div></div><div><div className="stat-note">{pending.length} candidates still need your review</div><div className="progress-line"><span style={{width:`${approved.length+pending.length?approved.length/(approved.length+pending.length)*100:0}%`}}/></div></div></section></div>
     <div className="section-row"><h2>Pick up where you left off</h2><button className="text-link" data-testid="link-progress" onClick={()=>onNavigate('progress')}>View progress <ChevronRight size={13} style={{verticalAlign:'middle'}}/></button></div>
     <div className="work-grid"><section className="panel work-panel"><div className="work-head"><h3>Needs a closer look</h3><span className="tiny-label">{pending.length} candidates</span></div>{pending.length?pending.slice(0,3).map(c=><div className="queue-row" key={c.id}><span className="queue-dot"/><div className="row-copy"><div className="row-title">{c.title}</div><div className="row-meta">{sourceByName(data.sources,c.sourceId)} · {c.kind}</div></div><button className="icon-button" aria-label={`Review ${c.title}`} data-testid={`button-review-item-${c.id}`} onClick={()=>onNavigate('review')}><ChevronRight size={15}/></button></div>):<div className="muted-note">Your review queue is clear. Add another source when you are ready.</div>}</section>
     <section className="panel work-panel"><div className="work-head"><h3>Recent sources</h3><button className="text-link" data-testid="link-sources" onClick={()=>onNavigate('sources')}>All sources <ChevronRight size={13}/></button></div>{data.sources.slice(0,3).map(s=><div className="source-row" key={s.id}><div className="source-symbol"><FileText size={16}/></div><div className="row-copy"><div className="row-title">{s.title}</div><div className="row-meta">{s.course} · {s.topic}</div></div><span className="tiny-label">{data.candidates.filter(c=>c.sourceId===s.id).length} items</span></div>)}</section></div>
-    <p className="muted-note" style={{marginTop:23}}><LockKeyhole size={12} style={{verticalAlign:'-2px'}}/> Your notebook is saved in this browser only. There is no account, sync, or server copy.</p>
+     <p className="muted-note" style={{marginTop:23}}><LockKeyhole size={12} style={{verticalAlign:'-2px'}}/> Your notebook is saved in this browser only. There is no account, sync, or server copy. A downloaded backup includes full source text and interpretations, so keep the file private.</p>
   </>;
 }
 function sourceByName(sources:Source[],sourceId:string){return sources.find(s=>s.id===sourceId)?.title||'Source removed';}
